@@ -107,7 +107,10 @@ defmodule LiveData.Channel do
     socket = %Socket{
       endpoint: endpoint,
       transport_pid: transport_pid,
-      private: %{lifecycle: lifecycle}
+      private: %{
+        lifecycle: lifecycle,
+        live_temp: %{}
+      }
     }
 
     state = %__MODULE__{
@@ -153,6 +156,16 @@ defmodule LiveData.Channel do
     state
   end
 
+  defp after_render(%{socket: socket} = state) do
+    state =
+      LiveData.Utils.get_push_events(socket)
+      |> Enum.reduce(state, fn [event, payload], state ->
+        push(state, event, payload)
+      end)
+
+    %{state | socket: %Socket{socket | private: Map.put(socket.private, :live_temp, %{})}}
+  end
+
   defp render_view(%{view: view, count: count, socket: socket} = state) do
     rendered = LiveData.Render.render(view, socket.assigns)
     patch = LiveData.Render.diff(%{"r" => state.rendered}, %{"r" => rendered})
@@ -163,7 +176,7 @@ defmodule LiveData.Channel do
     if LiveData.debug_prints?(),
       do: Logger.debug("Rendered: #{state.topic} \n  Patch: #{inspect(patch)}")
 
-    state
+    after_render(state)
   end
 
   defp maybe_call_data_view_mount!(state, params) do

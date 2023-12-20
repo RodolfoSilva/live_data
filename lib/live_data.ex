@@ -134,6 +134,8 @@ defmodule LiveData do
     end
   end
 
+  defdelegate push_event(socket, event, payload), to: LiveData.Utils
+
   defp validate_assign_key!(key) when is_atom(key), do: :ok
 
   defp validate_assign_key!(key) do
@@ -153,7 +155,7 @@ defmodule LiveData do
         put_redirect(socket, {:redirect, %{external: "#{scheme}:#{rest}"}})
 
       url when is_binary(url) ->
-        external_url = Phoenix.LiveView.Utils.valid_string_destination!(url, "redirect/2")
+        external_url = LiveData.Utils.valid_string_destination!(url, "redirect/2")
         put_redirect(socket, {:redirect, %{external: external_url}})
 
       other ->

@@ -5,7 +5,10 @@ defmodule LiveData.Socket do
             transport_pid: nil,
             redirected: nil,
             router: nil,
-            private: %{},
+            private: %{
+              live_temp: %{},
+              lifecycle: nil
+            },
             assigns: %{}
 
   @type assigns :: map()
