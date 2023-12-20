@@ -14,7 +14,7 @@ defmodule LiveData do
   calculating diffs, and synchronizing to the client.
 
   As with LiveView, your LiveData is just a normal process. The programming
-  model should feel very familear if you have ever used LiveView before.
+  model should feel very familiar if you have ever used LiveView before.
 
   ## Live-cycle
   Unlike with LiveView, the lifecycle of a LiveData is not tied closely to
@@ -86,7 +86,7 @@ defmodule LiveData do
   the list change order, any individual properties change, or other changes.
   """
 
-  alias LiveData.{Socket, Tracked}
+  alias LiveData.Socket
 
   @type rendered :: any()
 
@@ -96,21 +96,104 @@ defmodule LiveData do
   @callback handle_info(message :: any(), Socket.t()) :: {:ok, Socket.t()}
 
   @callback render(Socket.assigns()) :: rendered()
-  @callback __tracked__render__(Socket.assigns()) :: Tracked.tree()
 
   @optional_callbacks mount: 2, handle_event: 2, handle_info: 2
 
   defmacro __using__(opts) do
     quote bind_quoted: [opts: opts] do
-      use LiveData.Tracked
       import LiveData
       @behaviour LiveData
     end
   end
 
+  def assign(%Socket{} = socket, keyword_or_map)
+      when is_map(keyword_or_map) or is_list(keyword_or_map) do
+    Enum.reduce(keyword_or_map, socket, fn {key, value}, acc ->
+      assign(acc, key, value)
+    end)
+  end
+
   def assign(%Socket{assigns: assigns} = socket, key, value) do
+    validate_assign_key!(key)
     assigns = Map.put(assigns, key, value)
-    %{socket | assigns: assigns}
+    %Socket{socket | assigns: assigns}
+  end
+
+  def assign_new(%Socket{} = socket, key, fun) when is_function(fun, 1) do
+    validate_assign_key!(key)
+    assigns = assign_new(socket.assigns, key, fun)
+    %Socket{socket | assigns: assigns}
+  end
+
+  def assign_new(%{} = assigns, key, fun) when is_function(fun, 1) do
+    validate_assign_key!(key)
+
+    case assigns do
+      %{^key => _} -> assigns
+      _ -> Map.put_new(assigns, key, fun.(assigns))
+    end
+  end
+
+  defp validate_assign_key!(key) when is_atom(key), do: :ok
+
+  defp validate_assign_key!(key) do
+    raise ArgumentError, "assigns in LiveData must be atoms, got: #{inspect(key)}"
+  end
+
+  def redirect(socket, opts \\ [])
+
+  def redirect(%Socket{} = socket, to: url) do
+    validate_local_url!(url, "redirect/2")
+    put_redirect(socket, {:redirect, %{to: url}})
+  end
+
+  def redirect(%Socket{} = socket, external: url) do
+    case url do
+      {scheme, rest} ->
+        put_redirect(socket, {:redirect, %{external: "#{scheme}:#{rest}"}})
+
+      url when is_binary(url) ->
+        external_url = Phoenix.LiveView.Utils.valid_string_destination!(url, "redirect/2")
+        put_redirect(socket, {:redirect, %{external: external_url}})
+
+      other ->
+        raise ArgumentError,
+              "expected :external option in redirect/2 to be valid URL, got: #{inspect(other)}"
+    end
+  end
+
+  def redirect(%Socket{}, _) do
+    raise ArgumentError, "expected :to or :external option in redirect/2"
+  end
+
+  @invalid_local_url_chars ["\\"]
+
+  defp validate_local_url!("//" <> _ = to, where) do
+    raise_invalid_local_url!(to, where)
+  end
+
+  defp validate_local_url!("/" <> _ = to, where) do
+    if String.contains?(to, @invalid_local_url_chars) do
+      raise ArgumentError, "unsafe characters detected for #{where} in URL #{inspect(to)}"
+    else
+      to
+    end
+  end
+
+  defp validate_local_url!(to, where) do
+    raise_invalid_local_url!(to, where)
+  end
+
+  defp raise_invalid_local_url!(to, where) do
+    raise ArgumentError, "the :to option in #{where} expects a path but was #{inspect(to)}"
+  end
+
+  defp put_redirect(%Socket{redirected: nil} = socket, command) do
+    %Socket{socket | redirected: command}
+  end
+
+  defp put_redirect(%Socket{redirected: to} = _socket, _command) do
+    raise ArgumentError, "socket already prepared to redirect with #{inspect(to)}"
   end
 
   def debug_prints?, do: Application.get_env(:live_data, :deft_compiler_debug_prints, false)

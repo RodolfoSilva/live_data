@@ -9,8 +9,6 @@ defmodule LiveData.Channel do
 
   alias Phoenix.Socket.Message
   alias LiveData.Socket
-  alias LiveData.Tracked.Tree
-  alias LiveData.Tracked.Encoding
 
   def ping(pid) do
     GenServer.call(pid, {@prefix, :ping})
@@ -20,9 +18,8 @@ defmodule LiveData.Channel do
             view: nil,
             topic: nil,
             serializer: nil,
-            tracked_state: nil,
-            encoding_module: nil,
-            encoding_state: nil
+            count: -1,
+            rendered: %{}
 
   def start_link({endpoint, from}) do
     if LiveData.debug_prints?(), do: IO.inspect({endpoint, from})
@@ -49,16 +46,6 @@ defmodule LiveData.Channel do
     mount(params, from, phx_socket)
   end
 
-  #@impl true
-  #def handle_call(msg, _from, socket) do
-  #  IO.inspect(msg)
-  #  true = false
-  #end
-
-  #def handle_info({:DOWN, ref, _, _, _reason}, ref) do
-  #  {:stop, {:shutdown, :closed}, ref}
-  #end
-
   def handle_info(
         {:DOWN, _ref, _typ, transport_pid, _reason},
         %{socket: %{transport_pid: transport_pid}} = state
@@ -83,6 +70,7 @@ defmodule LiveData.Channel do
   defp call_handler({module, function}, params) do
     apply(module, function, [params])
   end
+
   defp call_handler(fun, params) when is_function(fun, 1) do
     fun.(params)
   end
@@ -91,8 +79,8 @@ defmodule LiveData.Channel do
     handler = phx_socket.assigns.live_data_handler
 
     case call_handler(handler, params) do
-      {view_module, view_opts} ->
-        mount_view(view_module, view_opts, params, from, phx_socket)
+      {view_module, view_opts, %{extra: extra}} ->
+        mount_view(view_module, view_opts, extra, params, from, phx_socket)
 
       nil ->
         GenServer.reply(from, {:error, %{reason: "no_route"}})
@@ -100,7 +88,7 @@ defmodule LiveData.Channel do
     end
   end
 
-  defp mount_view(view_module, _view_opts, params, from, phx_socket) do
+  defp mount_view(view_module, _view_opts, extra, params, from, phx_socket) do
     %Phoenix.Socket{
       endpoint: endpoint,
       transport_pid: transport_pid
@@ -114,52 +102,88 @@ defmodule LiveData.Channel do
       _ -> Process.put(:"$callers", [transport_pid])
     end
 
+    lifecycle = LiveData.Lifecycle.mount(view_module, Enum.reverse(extra[:on_mount] || []))
+
     socket = %Socket{
       endpoint: endpoint,
-      transport_pid: transport_pid
+      transport_pid: transport_pid,
+      private: %{lifecycle: lifecycle}
     }
-
-    encoding_module = Map.get(phx_socket.assigns, :live_data_encoding, Encoding.JSON)
 
     state = %__MODULE__{
       socket: socket,
       view: view_module,
       topic: phx_socket.topic,
-      serializer: phx_socket.serializer,
-      tracked_state: Tree.new(),
-      encoding_module: encoding_module,
-      encoding_state: encoding_module.new()
+      serializer: phx_socket.serializer
     }
 
     state = maybe_call_data_view_mount!(state, params)
 
-    :ok = GenServer.reply(from, {:ok, %{}})
+    if LiveData.debug_prints?(), do: IO.inspect(state)
 
-    state = render_view(state)
+    case state.socket.redirected do
+      {:redirect, %{to: _to} = opts} ->
+        state
+        |> push_redirect(opts, from)
+        |> stop_shutdown_redirect(:redirect, opts)
 
-    {:noreply, state}
+      _ ->
+        :ok = GenServer.reply(from, {:ok, %{}})
+        state = render_view(state)
+        {:noreply, state}
+    end
   end
 
-  defp render_view(%{tracked_state: tracked_state} = state) do
-    tree = state.view.__tracked__render__(state.socket.assigns)
+  defp stop_shutdown_redirect(state, kind, opts) do
+    send(state.socket.transport_pid, {:socket_close, self(), {kind, opts}})
+    {:stop, {:shutdown, {kind, opts}}, state}
+  end
 
-    {ops, tracked_state} = Tree.render(tree, tracked_state)
-    {encoded_ops, encoding_state} = state.encoding_module.format(ops, state.encoding_state)
+  defp push_redirect(state, opts, nil = _ref) do
+    push(state, "redirect", opts)
+  end
 
-    state = %{state | tracked_state: tracked_state, encoding_state: encoding_state}
+  defp push_redirect(state, opts, ref) do
+    reply(state, ref, :ok, %{redirect: opts})
+    state
+  end
 
-    if LiveData.debug_prints?(), do: IO.inspect encoded_ops
-    state = push(state, "o", %{"o" => encoded_ops})
+  defp reply(state, ref, status, payload) do
+    GenServer.reply(ref, {status, payload})
+    state
+  end
+
+  defp render_view(%{view: view, count: count, socket: socket} = state) do
+    rendered = LiveData.Render.render(view, socket.assigns)
+    patch = LiveData.Render.diff(%{"r" => state.rendered}, %{"r" => rendered})
+    new_count = count + 1
+    state = push(state, "o", %{"o" => patch, "c" => new_count})
+    state = %{state | rendered: rendered, count: new_count}
+
+    if LiveData.debug_prints?(),
+      do: Logger.debug("Rendered: #{state.topic} \n  Patch: #{inspect(patch)}")
+
     state
   end
 
   defp maybe_call_data_view_mount!(state, params) do
-    if is_exported?(state.view, :mount, 2) do
-      {:ok, socket} = state.view.mount(params, state.socket)
-      %{state | socket: socket}
-    else
-      state
-    end
+    session = %{}
+    socket = state.socket
+    %{exported?: exported?} = LiveData.Lifecycle.stage_info(socket, state.view, :mount, 2)
+
+    safe_params = Map.get(params, "p", %{})
+
+    socket =
+      case LiveData.Lifecycle.mount(safe_params, session, socket) do
+        {:cont, %Socket{} = socket} when exported? ->
+          {:ok, socket} = state.view.mount(safe_params, socket)
+          socket
+
+        {_, %Socket{} = socket} ->
+          socket
+      end
+
+    %{state | socket: socket}
   end
 
   defp push(state, event, payload) do
@@ -167,13 +191,4 @@ defmodule LiveData.Channel do
     send(state.socket.transport_pid, state.serializer.encode!(message))
     state
   end
-
-  defp is_exported?(module, function, arity) do
-    case :erlang.module_loaded(module) do
-      true -> nil
-      false -> :code.ensure_loaded(module)
-    end
-    function_exported?(module, function, arity)
-  end
-
 end

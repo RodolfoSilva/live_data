@@ -9,6 +9,7 @@ defmodule LiveData.Test do
 
   def live_data(data_module, opts \\ []) do
     endpoint = Keyword.get(opts, :endpoint, LiveData.Test.DummyEndpoint)
+
     start_proxy(%{
       module: data_module,
       endpoint: endpoint
@@ -28,13 +29,18 @@ defmodule LiveData.Test do
     render(view)
   end
 
+  def render_server_event(view, event) do
+    send(view.pid, event)
+    render(view)
+  end
+
   defp start_proxy(%{} = opts) do
     ref = make_ref()
 
     opts =
       Map.merge(opts, %{
         caller: {self(), ref},
-        test_supervisor: fetch_test_supervisor!(),
+        test_supervisor: fetch_test_supervisor!()
       })
 
     case ClientProxy.start_link(opts) do
@@ -51,5 +57,4 @@ defmodule LiveData.Test do
       :error -> raise ArgumentError, "LiveData helpers can only be invoked from the test process"
     end
   end
-
 end

@@ -83,8 +83,19 @@ defmodule LiveData.Router do
     module = tear_alias(module)
 
     quote do
-      @phoenix_data_view_routes {unquote(route), unquote(module), unquote(opts)}
+      @phoenix_data_view_routes {
+        unquote(route),
+        unquote(module),
+        unquote(opts),
+        LiveData.Router.__live__(__MODULE__)
+      }
     end
+  end
+
+  @doc false
+  def __live__(router) do
+    Module.get_attribute(router, :phoenix_live_session_current) ||
+      %{name: :default, extra: %{}, vsn: session_vsn(router)}
   end
 
   defp tear_alias({:__aliases__, meta, [h | t]}) do
@@ -105,17 +116,21 @@ defmodule LiveData.Router do
       for {topic_pattern, module, opts} <- channels do
         topic_pattern
         |> to_topic_match()
-        |> defchannel(module, opts)
+        |> def_channel(module, opts)
       end
 
     data_view_defs =
-      for {route, module, opts} <- data_views do
-        defdataview(route, module, opts)
+      for {route, module, opts, live_session} <- data_views do
+        def_data_view(route, module, opts, live_session)
       end
 
     quote do
       # All channels under "dv:*" are reserved.
-      def __channel__("dv:c:" <> _rest), do: {LiveData.Channel, [assigns: %{live_data_handler: {unquote(env.module), :__live_data_handler__}}]}
+      def __channel__("dv:c:" <> _rest),
+        do:
+          {LiveData.Channel,
+           [assigns: %{live_data_handler: {unquote(env.module), :__live_data_handler__}}]}
+
       def __channel__("dv:" <> _rest), do: nil
       unquote(channel_defs)
       def __channel__(_topic), do: nil
@@ -123,8 +138,10 @@ defmodule LiveData.Router do
       unquote(data_view_defs)
       def __live_data__(_route), do: nil
 
-      def __live_data_handler__(%{"r" => route}) do
-        IO.inspect route
+      require Logger
+
+      def __live_data_handler__(%{"r" => route} = x) do
+        Logger.debug("SDUI Render: #{route}")
         __live_data__(route)
       end
     end
@@ -138,15 +155,114 @@ defmodule LiveData.Router do
     end
   end
 
-  defp defchannel(topic_match, channel_module, opts) do
+  defp def_channel(topic_match, channel_module, opts) do
     quote do
       def __channel__(unquote(topic_match)), do: unquote({channel_module, Macro.escape(opts)})
     end
   end
 
-  defp defdataview(route, data_view_module, opts) do
+  defp def_data_view(route, data_view_module, opts, live_session) do
     quote do
-      def __live_data__(unquote(route)), do: unquote({data_view_module, Macro.escape(opts)})
+      def __live_data__(unquote(route)),
+        do:
+          {unquote(data_view_module), unquote(Macro.escape(opts)),
+           unquote(Macro.escape(live_session))}
+    end
+  end
+
+  defmacro live_session(name, opts \\ [], do: block) do
+    opts =
+      if Macro.quoted_literal?(opts) do
+        Macro.prewalk(opts, &expand_alias(&1, __CALLER__))
+      else
+        opts
+      end
+
+    quote do
+      unquote(__MODULE__).__live_session__(__MODULE__, unquote(opts), unquote(name))
+      unquote(block)
+      Module.delete_attribute(__MODULE__, :phoenix_live_session_current)
+    end
+  end
+
+  defp expand_alias({:__aliases__, _, _} = alias, env),
+    do: Macro.expand(alias, %{env | function: {:mount, 3}})
+
+  defp expand_alias(other, _env), do: other
+
+  @doc false
+  def __live_session__(module, opts, name) do
+    Module.register_attribute(module, :phoenix_live_sessions, accumulate: true)
+    vsn = session_vsn(module)
+
+    unless is_atom(name) do
+      raise ArgumentError, """
+      expected live_session name to be an atom, got: #{inspect(name)}
+      """
+    end
+
+    extra = validate_live_session_opts(opts, module, name)
+
+    if nested = Module.get_attribute(module, :phoenix_live_session_current) do
+      raise """
+      attempting to define live_session #{inspect(name)} inside #{inspect(nested.name)}.
+      live_session definitions cannot be nested.
+      """
+    end
+
+    if name in Module.get_attribute(module, :phoenix_live_sessions) do
+      raise """
+      attempting to redefine live_session #{inspect(name)}.
+      live_session routes must be declared in a single named block.
+      """
+    end
+
+    current = %{name: name, extra: extra, vsn: vsn}
+    Module.put_attribute(module, :phoenix_live_session_current, current)
+    Module.put_attribute(module, :phoenix_live_sessions, name)
+  end
+
+  @live_session_opts [:on_mount, :session]
+  defp validate_live_session_opts(opts, module, _name) when is_list(opts) do
+    Enum.reduce(opts, %{}, fn
+      {:session, val}, acc when is_map(val) or (is_tuple(val) and tuple_size(val) == 3) ->
+        Map.put(acc, :session, val)
+
+      {:session, bad_session}, _acc ->
+        raise ArgumentError, """
+        invalid live_session :session
+
+        expected a map with string keys or an MFA tuple, got #{inspect(bad_session)}
+        """
+
+      {:on_mount, on_mount}, acc ->
+        hooks = Enum.map(List.wrap(on_mount), &LiveData.Lifecycle.on_mount(module, &1))
+        Map.put(acc, :on_mount, hooks)
+
+      {key, _val}, _acc ->
+        raise ArgumentError, """
+        unknown live_session option "#{inspect(key)}"
+
+        Supported options include: #{inspect(@live_session_opts)}
+        """
+    end)
+  end
+
+  defp validate_live_session_opts(invalid, _module, name) do
+    raise ArgumentError, """
+    expected second argument to live_session to be a list of options, got:
+
+        live_session #{inspect(name)}, #{inspect(invalid)}
+    """
+  end
+
+  defp session_vsn(module) do
+    if vsn = Module.get_attribute(module, :phoenix_session_vsn) do
+      vsn
+    else
+      vsn = System.system_time()
+      Module.put_attribute(module, :phoenix_session_vsn, vsn)
+      vsn
     end
   end
 end

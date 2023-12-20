@@ -6,7 +6,7 @@ defmodule LiveData.Test.TestingData do
     {:ok, socket}
   end
 
-  deft render(assigns) do
+  def render(assigns) do
     %{
       counter: assigns[:counter]
     }
@@ -21,5 +21,4 @@ defmodule LiveData.Test.TestingData do
     socket = assign(socket, :counter, socket.assigns.counter + 1)
     {:ok, socket}
   end
-
 end
