@@ -1,7 +1,7 @@
 # Original implementation from Phoenix.LiveView
 defmodule LiveData.Lifecycle do
   @moduledoc false
-  alias Phoenix.LiveView.Utils
+  alias LiveData.Utils
   alias LiveData.Socket
 
   @lifecycle :lifecycle
