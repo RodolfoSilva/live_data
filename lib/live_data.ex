@@ -86,7 +86,8 @@ defmodule LiveData do
   the list change order, any individual properties change, or other changes.
   """
 
-  alias LiveData.Socket
+  alias LiveData.AsyncResult
+  alias LiveData.{Socket, Async}
 
   @type rendered :: any()
 
@@ -131,6 +132,51 @@ defmodule LiveData do
     case assigns do
       %{^key => _} -> assigns
       _ -> Map.put_new(assigns, key, fun.(assigns))
+    end
+  end
+
+  @doc """
+  Assigns keys asynchronously.
+
+  The task is linked to the caller and errors are wrapped.
+  Each key passed to `assign_async/3` will be assigned to
+  an `%AsyncResult{}` struct holding the status of the operation
+  and the result when completed.
+
+  ## Examples
+
+      def mount(%{"slug" => slug}, _, socket) do
+        {:ok,
+         socket
+         |> assign(:foo, "bar")
+         |> assign_async(:org, fn -> {:ok, %{org: fetch_org!(slug)}} end)
+         |> assign_async([:profile, :rank], fn -> {:ok, %{profile: ..., rank: ...}} end)}
+      end
+
+  See the moduledoc for more information.
+  """
+  def assign_async(%Socket{} = socket, key_or_keys, func)
+      when (is_atom(key_or_keys) or is_list(key_or_keys)) and
+             is_function(func, 0) do
+    Async.assign_async(socket, key_or_keys, func)
+  end
+
+  def async_result(%AsyncResult{} = async_assign, clauses) do
+    if !Keyword.keyword?(clauses) or
+         !Enum.all?(clauses, fn {key, _} -> key in [:ok, :loading, :failed] end) do
+      raise ArgumentError,
+            "invalid clauses, expected :ok, :loading, or :failed: #{inspect(clauses)}"
+    end
+
+    cond do
+      async_assign.ok? ->
+        clauses[:ok].(async_assign.result)
+
+      async_assign.loading ->
+        clauses[:loading].()
+
+      !is_nil(async_assign.failed) ->
+        clauses[:failed].(async_assign.result)
     end
   end
 

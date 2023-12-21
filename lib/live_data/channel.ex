@@ -8,7 +8,7 @@ defmodule LiveData.Channel do
   require Logger
 
   alias Phoenix.Socket.Message
-  alias LiveData.Socket
+  alias LiveData.{Socket, Async}
 
   def ping(pid) do
     GenServer.call(pid, {@prefix, :ping})
@@ -44,6 +44,18 @@ defmodule LiveData.Channel do
     Process.demonitor(ref)
 
     mount(params, from, phx_socket)
+  end
+
+  def handle_info({@prefix, :async_result, {kind, info}}, state) do
+    {ref, cid, keys, result} = info
+
+    new_state =
+      write_socket(state, cid, nil, fn socket, maybe_component ->
+        new_socket = Async.handle_async(socket, maybe_component, kind, keys, ref, result)
+        {new_socket, {:ok, nil, state}}
+      end)
+
+    {:noreply, new_state}
   end
 
   def handle_info(
@@ -137,6 +149,11 @@ defmodule LiveData.Channel do
     end
   end
 
+  def report_async_result(monitor_ref, kind, ref, cid, keys, result)
+      when is_reference(monitor_ref) and kind in [:assign, :start] and is_reference(ref) do
+    send(monitor_ref, {@prefix, :async_result, {kind, {ref, cid, keys, result}}})
+  end
+
   defp stop_shutdown_redirect(state, kind, opts) do
     send(state.socket.transport_pid, {:socket_close, self(), {kind, opts}})
     {:stop, {:shutdown, {kind, opts}}, state}
@@ -204,4 +221,21 @@ defmodule LiveData.Channel do
     send(state.socket.transport_pid, state.serializer.encode!(message))
     state
   end
+
+  # If :error is returned, the socket must not change,
+  # otherwise we need to call push_diff on all cases.
+  defp write_socket(state, nil, ref, fun) do
+    {new_socket, return} = fun.(state.socket, nil)
+
+    case return do
+      {:ok, _ref_reply, new_state} ->
+        render_view(%{new_state | socket: new_socket})
+
+      :error ->
+        push_noop(state, ref)
+    end
+  end
+
+  defp push_noop(state, nil = _ref), do: state
+  defp push_noop(state, ref), do: reply(state, ref, :ok, %{})
 end

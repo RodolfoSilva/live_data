@@ -24,6 +24,11 @@ defmodule LiveData.Test do
     GenServer.call(view.proxy, :render)
   end
 
+  def act_and_render(view) do
+    Process.sleep(1)
+    GenServer.call(view.proxy, :render)
+  end
+
   def render_client_event(view, data) do
     client_event(view, data)
     render(view)
