@@ -245,4 +245,30 @@ defmodule LiveData do
   end
 
   def debug_prints?, do: Application.get_env(:live_data, :deft_compiler_debug_prints, false)
+
+  def live_component(assigns) when is_map(assigns) do
+    id = assigns[:id]
+
+    {module, assigns} =
+      assigns
+      |> Map.delete(:__changed__)
+      |> Map.pop(:module)
+
+    if module == nil or not is_atom(module) do
+      raise ArgumentError,
+            "live_component/1 expects module: ... to be given and to be an atom, got: #{inspect(module)}"
+    end
+
+    if id == nil do
+      raise ArgumentError, "live_component/1 expects id: ... to be given, got: nil"
+    end
+
+    # case module.__live__() do
+    #   %{kind: :component} ->
+    %LiveData.Component{id: id, assigns: assigns, component: module}
+
+    #   %{kind: kind} ->
+    #     raise ArgumentError, "expected #{inspect(module)} to be a component, but it is a #{kind}"
+    # end
+  end
 end

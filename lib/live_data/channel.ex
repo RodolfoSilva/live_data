@@ -19,6 +19,7 @@ defmodule LiveData.Channel do
             topic: nil,
             serializer: nil,
             count: -1,
+            components: [],
             rendered: %{}
 
   def start_link({endpoint, from}) do
@@ -65,10 +66,21 @@ defmodule LiveData.Channel do
     {:stop, {:shutdown, :closed}, state}
   end
 
-  def handle_info(%Message{event: "e", payload: %{"d" => data}}, state) do
-    {:ok, socket} = state.view.handle_event(data, state.socket)
-    state = %{state | socket: socket}
-    state = render_view(state)
+  def handle_info(%Message{event: "e", payload: %{"d" => data}} = msg, state) do
+    if cid = msg.payload["cid"] do
+      %{"value" => val, "event" => event} = msg.payload
+      # , "type" => _type
+      component_handle_event(state, cid, event, val, msg.ref, msg.payload)
+    else
+      {:ok, socket} = state.view.handle_event(data, state.socket)
+      state = %{state | socket: socket}
+      state = render_view(state)
+      {:noreply, state}
+    end
+  end
+
+  defp component_handle_event(state, cid, event, val, ref, payload) do
+    %{socket: socket, components: components} = state
     {:noreply, state}
   end
 
@@ -184,11 +196,11 @@ defmodule LiveData.Channel do
   end
 
   defp render_view(%{view: view, count: count, socket: socket} = state) do
-    rendered = LiveData.Render.render(view, socket.assigns)
+    {rendered, components} = LiveData.Render.render(view, socket.assigns)
     patch = LiveData.Render.diff(%{"r" => state.rendered}, %{"r" => rendered})
     new_count = count + 1
     state = push(state, "o", %{"o" => patch, "c" => new_count})
-    state = %{state | rendered: rendered, count: new_count}
+    state = %{state | rendered: rendered, components: components, count: new_count}
 
     if LiveData.debug_prints?(),
       do: Logger.debug("Rendered: #{state.topic} \n  Patch: #{inspect(patch)}")

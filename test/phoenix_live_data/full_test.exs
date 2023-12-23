@@ -11,5 +11,14 @@ defmodule LiveData.FullTest do
       assert render_server_event(view, :increment) == %{"counter" => 1, "lazy_counter" => 3}
       assert render_client_event(view, "increment") == %{"counter" => 2, "lazy_counter" => 3}
     end
+
+    test "testing components round #{i}" do
+      {:ok, _view, data} = live_data(LiveData.Test.TestingDataComponents)
+
+      assert data == [
+               %{"counter" => 0, "welcome" => %{"hello" => "World"}},
+               %{"counter" => 0, "welcome" => %{"hello" => "Elixir"}}
+             ]
+    end
   end
 end
