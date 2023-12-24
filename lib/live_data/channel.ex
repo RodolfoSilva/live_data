@@ -103,7 +103,8 @@ defmodule LiveData.Channel do
   defp mount_view(view_module, _view_opts, extra, params, from, phx_socket) do
     %Phoenix.Socket{
       endpoint: endpoint,
-      transport_pid: transport_pid
+      transport_pid: transport_pid,
+      assigns: assigns
       # handler: router
     } = phx_socket
 
@@ -119,6 +120,7 @@ defmodule LiveData.Channel do
     socket = %Socket{
       endpoint: endpoint,
       transport_pid: transport_pid,
+      assigns: assigns,
       private: %{
         lifecycle: lifecycle,
         live_temp: %{}
