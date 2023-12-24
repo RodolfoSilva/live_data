@@ -65,8 +65,8 @@ defmodule LiveData.Channel do
     {:stop, {:shutdown, :closed}, state}
   end
 
-  def handle_info(%Message{event: "e", payload: %{"d" => data}}, state) do
-    {:ok, socket} = state.view.handle_event(data, state.socket)
+  def handle_info(%Message{event: "e", payload: [event, payload]}, state) do
+    {:ok, socket} = state.view.handle_event(event, payload || %{}, state.socket)
     state = %{state | socket: socket}
     state = render_view(state)
     {:noreply, state}
