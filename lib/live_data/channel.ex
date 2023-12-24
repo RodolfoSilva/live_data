@@ -120,7 +120,7 @@ defmodule LiveData.Channel do
     socket = %Socket{
       endpoint: endpoint,
       transport_pid: transport_pid,
-      assigns: assigns,
+      assigns: Map.drop(assigns, [:live_data_handler]),
       private: %{
         lifecycle: lifecycle,
         live_temp: %{}
