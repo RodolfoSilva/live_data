@@ -93,12 +93,12 @@ defmodule LiveData do
 
   @callback mount(params :: any(), Socket.t()) :: {:ok, Socket.t()}
 
-  @callback handle_event(event :: any(), Socket.t()) :: {:ok, Socket.t()}
+  @callback handle_event(event :: String.t(), payload :: map(), Socket.t()) :: {:ok, Socket.t()}
   @callback handle_info(message :: any(), Socket.t()) :: {:ok, Socket.t()}
 
   @callback render(Socket.assigns()) :: rendered()
 
-  @optional_callbacks mount: 2, handle_event: 2, handle_info: 2
+  @optional_callbacks mount: 2, handle_event: 3, handle_info: 2
 
   defmacro __using__(opts) do
     quote bind_quoted: [opts: opts] do
