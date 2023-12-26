@@ -9,7 +9,15 @@ defmodule LiveData.Socket do
               live_temp: %{},
               lifecycle: nil
             },
-            assigns: %{}
+            assigns: %{
+              __changed__: %{}
+            }
 
   @type assigns :: map()
+
+  def new_assign(attrs) do
+    %{assigns: assigns} = %__MODULE__{}
+
+    Map.merge(assigns, attrs)
+  end
 end

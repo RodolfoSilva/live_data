@@ -7,7 +7,7 @@ defmodule LiveData.Channel do
 
   require Logger
 
-  alias Phoenix.Socket.Message
+  alias Phoenix.Socket.{Message, Reply}
   alias LiveData.{Socket, Async}
 
   def ping(pid) do
@@ -65,10 +65,21 @@ defmodule LiveData.Channel do
     {:stop, {:shutdown, :closed}, state}
   end
 
-  def handle_info(%Message{event: "e", payload: %{"e" => event} = payload}, state) do
-    {:ok, socket} = state.view.handle_event(event, payload["p"] || %{}, state.socket)
-    state = %{state | socket: socket}
-    state = render_view(state)
+  def handle_info(%Message{event: "e", payload: %{"e" => event} = payload} = message, state) do
+    state =
+      state.view.handle_event(event, payload["p"] || %{}, state.socket)
+      |> case do
+        {:reply, %{} = reply, new_socket} ->
+          %{state | socket: new_socket}
+          |> put_replay_message(message, :ok, reply)
+          |> render_view()
+
+        {result, new_socket} when result in [:noreply, :ok] ->
+          %{state | socket: new_socket}
+          |> put_replay_message(message, :ok, %{})
+          |> render_view()
+      end
+
     {:noreply, state}
   end
 
@@ -77,6 +88,19 @@ defmodule LiveData.Channel do
     state = %{state | socket: socket}
     state = render_view(state)
     {:noreply, state}
+  end
+
+  defp put_replay_message(state, %Message{} = message, status, payload) do
+    reply = %Reply{
+      ref: message.ref,
+      join_ref: message.join_ref,
+      topic: message.topic,
+      status: status,
+      payload: payload
+    }
+
+    socket = LiveData.Utils.put_reply(state.socket, reply)
+    %{state | socket: socket}
   end
 
   defp call_handler({module, function}, params) do
@@ -177,12 +201,31 @@ defmodule LiveData.Channel do
 
   defp after_render(%{socket: socket} = state) do
     state =
-      LiveData.Utils.get_push_events(socket)
-      |> Enum.reduce(state, fn [event, payload], state ->
-        push(state, event, payload)
-      end)
+      state
+      |> maybe_push_events()
+      |> maybe_push_reply()
 
     %{state | socket: %Socket{socket | private: Map.put(socket.private, :live_temp, %{})}}
+  end
+
+  defp maybe_push_events(%{socket: socket} = state) do
+    state =
+      LiveData.Utils.get_push_events(socket)
+      |> Enum.reduce(state, fn [event, payload], state -> push(state, event, payload) end)
+
+    state
+  end
+
+  defp maybe_push_reply(%{socket: socket} = state) do
+    LiveData.Utils.get_reply(socket)
+    |> case do
+      nil ->
+        state
+
+      reply ->
+        send(state.socket.transport_pid, state.serializer.encode!(reply))
+        state
+    end
   end
 
   defp render_view(%{view: view, count: count, socket: socket} = state) do

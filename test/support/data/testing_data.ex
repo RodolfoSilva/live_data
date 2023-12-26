@@ -26,7 +26,7 @@ defmodule LiveData.Test.TestingData do
     {:ok, socket}
   end
 
-  def handle_event("increment", socket) do
+  def handle_event("increment", _params, socket) do
     socket = assign(socket, :counter, socket.assigns.counter + 1)
     {:ok, socket}
   end

@@ -129,7 +129,12 @@ defmodule LiveData.Router do
       def __channel__("dv:c:" <> _rest),
         do:
           {LiveData.Channel,
-           [assigns: %{live_data_handler: {unquote(env.module), :__live_data_handler__}}]}
+           [
+             assigns:
+               LiveData.Socket.new_assign(%{
+                 live_data_handler: {unquote(env.module), :__live_data_handler__}
+               })
+           ]}
 
       def __channel__("dv:" <> _rest), do: nil
       unquote(channel_defs)

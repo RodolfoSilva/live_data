@@ -81,6 +81,11 @@ defmodule LiveData.Test.ClientProxy do
     {:noreply, state}
   end
 
+  def handle_info(%Phoenix.Socket.Reply{}, state) do
+    # state = %{state | apply: Apply.apply(ops, state.apply)}
+    {:noreply, state}
+  end
+
   def handle_info({:render_sync, from}, state) do
     :ok = GenServer.reply(from, state.apply.rendered)
     {:noreply, state}
@@ -92,8 +97,8 @@ defmodule LiveData.Test.ClientProxy do
     {:noreply, state}
   end
 
-  def handle_call({:push_client_event, data}, _from, state) do
-    send(state.pid, %Phoenix.Socket.Message{event: "e", payload: %{"d" => data}})
+  def handle_call({:push_client_event, {event, payload}}, _from, state) do
+    send(state.pid, %Phoenix.Socket.Message{event: "e", payload: %{"e" => event, "p" => payload}})
     {:reply, :ok, state}
   end
 
@@ -103,11 +108,12 @@ defmodule LiveData.Test.ClientProxy do
 
   defp start_supervised_channel(state, ref) do
     socket = %Phoenix.Socket{
-      assigns: %{
-        live_data_handler: fn _params ->
-          {state.module, [], %{extra: %{}}}
-        end
-      },
+      assigns:
+        LiveData.Socket.new_assign(%{
+          live_data_handler: fn _params ->
+            {state.module, [], %{extra: %{}}}
+          end
+        }),
       transport_pid: self(),
       serializer: __MODULE__
     }

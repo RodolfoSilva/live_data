@@ -16,8 +16,8 @@ defmodule LiveData.Test do
     })
   end
 
-  def client_event(view, data) do
-    GenServer.call(view.proxy, {:push_client_event, data})
+  def client_event(view, event, payload \\ %{}) do
+    GenServer.call(view.proxy, {:push_client_event, {event, payload}})
   end
 
   def render(view) do
@@ -29,8 +29,8 @@ defmodule LiveData.Test do
     GenServer.call(view.proxy, :render)
   end
 
-  def render_client_event(view, data) do
-    client_event(view, data)
+  def render_client_event(view, event, payload \\ %{}) do
+    client_event(view, event, payload)
     render(view)
   end
 

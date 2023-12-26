@@ -114,16 +114,14 @@ defmodule LiveData do
     end)
   end
 
-  def assign(%Socket{assigns: assigns} = socket, key, value) do
+  def assign(%Socket{} = socket, key, value) do
     validate_assign_key!(key)
-    assigns = Map.put(assigns, key, value)
-    %Socket{socket | assigns: assigns}
+    LiveData.Utils.assign(socket, key, value)
   end
 
   def assign_new(%Socket{} = socket, key, fun) when is_function(fun, 1) do
     validate_assign_key!(key)
-    assigns = assign_new(socket.assigns, key, fun)
-    %Socket{socket | assigns: assigns}
+    LiveData.Utils.assign_new(socket, key, fun)
   end
 
   def assign_new(%{} = assigns, key, fun) when is_function(fun, 1) do
@@ -180,6 +178,91 @@ defmodule LiveData do
     end
   end
 
+  @doc """
+  Adds a flash message to the socket to be displayed.
+
+  *Note*: While you can use `put_flash/3` inside a `Phoenix.LiveComponent`,
+  components have their own `@flash` assigns. The `@flash` assign
+  in a component is only copied to its parent LiveView if the component
+  calls `push_navigate/2` or `push_patch/2`.
+
+  *Note*: You must also place the `LiveData.Router.fetch_live_flash/2`
+  plug in your browser's pipeline in place of `fetch_flash` for LiveView flash
+  messages be supported, for example:
+
+      import LiveData.Router
+
+      pipeline :browser do
+        ...
+        plug :fetch_live_flash
+      end
+
+  ## Examples
+
+      iex> put_flash(socket, :info, "It worked!")
+      iex> put_flash(socket, :error, "You can't access that page")
+  """
+
+  defdelegate put_flash(socket, kind, msg), to: LiveData.Utils
+
+  @doc """
+  Clears the flash.
+
+  ## Examples
+
+      iex> clear_flash(socket)
+  """
+  defdelegate clear_flash(socket), to: LiveData.Utils
+
+  @doc """
+  Clears a key from the flash.
+
+  ## Examples
+
+      iex> clear_flash(socket, :info)
+  """
+  defdelegate clear_flash(socket, key), to: LiveData.Utils
+
+  @doc """
+  Pushes an event to the client.
+
+  Events can be handled in two ways:
+
+    1. They can be handled on `window` via `addEventListener`.
+       A "phx:" prefix will be added to the event name.
+
+    2. They can be handled inside a hook via `handleEvent`.
+
+  Note that events are dispatched to all active hooks on the client who are
+  handling the given `event`. If you need to scope events, then this must
+  be done by name spacing them.
+
+  ## Hook example
+
+  If you push a "scores" event from your LiveView:
+
+      {:noreply, push_event(socket, "scores", %{points: 100, user: "josé"})}
+
+  A hook declared via `phx-hook` can handle it via `handleEvent`:
+
+      this.handleEvent("scores", data => ...)
+
+  ## `window` example
+
+  All events are also dispatched on the `window`. This means you can handle
+  them by adding listeners. For example, if you want to remove an element
+  from the page, you can do this:
+
+      {:noreply, push_event(socket, "remove-el", %{id: "foo-bar"})}
+
+  And now in your app.js you can register and handle it:
+
+      window.addEventListener(
+        "phx:remove-el",
+        e => document.getElementById(e.detail.id).remove()
+      )
+
+  """
   defdelegate push_event(socket, event, payload), to: LiveData.Utils
 
   defp validate_assign_key!(key) when is_atom(key), do: :ok
@@ -188,7 +271,7 @@ defmodule LiveData do
     raise ArgumentError, "assigns in LiveData must be atoms, got: #{inspect(key)}"
   end
 
-  def redirect(socket, opts \\ [])
+  def redirect(socket, opts)
 
   def redirect(%Socket{} = socket, to: url) do
     validate_local_url!(url, "redirect/2")
