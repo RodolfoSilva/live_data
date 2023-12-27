@@ -93,7 +93,8 @@ defmodule LiveData do
 
   @callback mount(params :: any(), Socket.t()) :: {:ok, Socket.t()}
 
-  @callback handle_event(event :: String.t(), payload :: map(), Socket.t()) :: {:ok, Socket.t()}
+  @callback handle_event(event :: String.t(), payload :: map(), Socket.t()) ::
+              {:ok, Socket.t()} | {:noreply, Socket.t()} | {:reply, map, Socket.t()}
   @callback handle_info(message :: any(), Socket.t()) :: {:ok, Socket.t()}
 
   @callback render(Socket.assigns()) :: rendered()
