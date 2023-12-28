@@ -10,7 +10,8 @@ defmodule LiveData.Socket do
               lifecycle: nil
             },
             assigns: %{
-              __changed__: %{}
+              __changed__: %{},
+              flash: %{}
             }
 
   @type assigns :: map()
