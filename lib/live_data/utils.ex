@@ -135,7 +135,7 @@ defmodule LiveData.Utils do
   """
   def clear_flash(%Socket{} = socket, key) do
     key = flash_key(key)
-    new_flash = Map.delete(socket.assigns.flash, key)
+    new_flash = Map.delete(socket.assigns[:flash] || %{}, key)
 
     socket = assign(socket, :flash, new_flash)
     update_in(socket.private.live_temp[:flash], &Map.delete(&1 || %{}, key))
@@ -146,7 +146,7 @@ defmodule LiveData.Utils do
   """
   def put_flash(%Socket{assigns: assigns} = socket, key, msg) do
     key = flash_key(key)
-    new_flash = Map.put(assigns.flash, key, msg)
+    new_flash = Map.put(assigns[:flash] || %{}, key, msg)
 
     socket = assign(socket, :flash, new_flash)
     update_in(socket.private.live_temp[:flash], &Map.put(&1 || %{}, key, msg))
