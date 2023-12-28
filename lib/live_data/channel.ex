@@ -65,6 +65,10 @@ defmodule LiveData.Channel do
     {:stop, {:shutdown, :closed}, state}
   end
 
+  def handle_info(%Message{event: "phx_leave"}, state) do
+    {:stop, {:shutdown, :closed}, state}
+  end
+
   def handle_info(%Message{event: "e", payload: %{"e" => event} = payload} = message, state) do
     state =
       state.view.handle_event(event, payload["p"] || %{}, state.socket)
