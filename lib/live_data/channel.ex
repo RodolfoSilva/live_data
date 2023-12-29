@@ -213,11 +213,8 @@ defmodule LiveData.Channel do
   end
 
   defp maybe_push_events(%{socket: socket} = state) do
-    state =
-      LiveData.Utils.get_push_events(socket)
-      |> Enum.reduce(state, fn [event, payload], state -> push(state, event, payload) end)
-
-    state
+    LiveData.Utils.get_push_events(socket)
+    |> Enum.reduce(state, fn [event, payload], state -> push(state, event, payload) end)
   end
 
   defp maybe_push_reply(%{socket: socket} = state) do
@@ -232,12 +229,14 @@ defmodule LiveData.Channel do
     end
   end
 
-  defp render_view(%{view: view, count: count, socket: socket} = state) do
+  defp render_view(%{view: view, socket: socket} = state) do
     rendered = LiveData.Render.render(view, socket.assigns)
     patch = LiveData.Render.diff(%{"r" => state.rendered}, %{"r" => rendered})
-    new_count = count + 1
-    state = push(state, "o", %{"o" => patch, "c" => new_count})
-    state = %{state | rendered: rendered, count: new_count}
+
+    flash = LiveData.Utils.get_flash(socket)
+    state = push(state, "o", %{"o" => patch, "f" => flash})
+    socket = LiveData.Utils.clear_flash(socket)
+    state = %{state | rendered: rendered, socket: socket}
 
     if LiveData.debug_prints?(),
       do: Logger.debug("Rendered: #{state.topic} \n  Patch: #{inspect(patch)}")

@@ -5,7 +5,7 @@ defmodule LiveData.Test.Apply do
   #
   # Used by tests.
 
-  defstruct rendered: %{}
+  defstruct rendered: %{}, flash: %{}
 
   def new do
     %__MODULE__{}

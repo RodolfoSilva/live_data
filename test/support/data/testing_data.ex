@@ -22,7 +22,11 @@ defmodule LiveData.Test.TestingData do
   end
 
   def handle_info(:increment, socket) do
-    socket = assign(socket, :counter, socket.assigns.counter + 1)
+    socket =
+      socket
+      |> put_flash(:info, "Incremented!")
+      |> assign(:counter, socket.assigns.counter + 1)
+
     {:ok, socket}
   end
 

@@ -73,11 +73,11 @@ defmodule LiveData.Test.ClientProxy do
         %Phoenix.Socket.Message{
           event: "o",
           topic: _topic,
-          payload: %{"o" => ops}
+          payload: %{"o" => ops, "f" => flash}
         },
         state
       ) do
-    state = %{state | apply: Apply.apply(ops, state.apply)}
+    state = %{state | apply: %{Apply.apply(ops, state.apply) | flash: flash}}
     {:noreply, state}
   end
 
@@ -91,9 +91,20 @@ defmodule LiveData.Test.ClientProxy do
     {:noreply, state}
   end
 
+  def handle_info({:get_flash_sync, from}, state) do
+    :ok = GenServer.reply(from, state.apply.flash)
+    {:noreply, state}
+  end
+
   def handle_call(:render, from, state) do
     :ok = LiveData.Channel.ping(state.pid)
     send(self(), {:render_sync, from})
+    {:noreply, state}
+  end
+
+  def handle_call(:get_flash, from, state) do
+    :ok = LiveData.Channel.ping(state.pid)
+    send(self(), {:get_flash_sync, from})
     {:noreply, state}
   end
 

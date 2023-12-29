@@ -111,23 +111,10 @@ defmodule LiveData.Utils do
   end
 
   @doc """
-  Returns the socket's flash messages.
-  """
-  def get_flash(%Socket{assigns: assigns}), do: assigns.flash
-  def get_flash(%{} = flash, key), do: flash[key]
-
-  @doc """
-  Puts a new flash with the socket's flash messages.
-  """
-  def replace_flash(%Socket{} = socket, %{} = new_flash) do
-    assign(socket, :flash, new_flash)
-  end
-
-  @doc """
   Clears the flash.
   """
   def clear_flash(%Socket{} = socket) do
-    assign(socket, :flash, %{})
+    put_in(socket.private.live_temp[:flash], %{})
   end
 
   @doc """
@@ -135,27 +122,21 @@ defmodule LiveData.Utils do
   """
   def clear_flash(%Socket{} = socket, key) do
     key = flash_key(key)
-    new_flash = Map.delete(socket.assigns[:flash] || %{}, key)
-
-    socket = assign(socket, :flash, new_flash)
     update_in(socket.private.live_temp[:flash], &Map.delete(&1 || %{}, key))
   end
 
   @doc """
   Puts a flash message in the socket.
   """
-  def put_flash(%Socket{assigns: assigns} = socket, key, msg) do
+  def put_flash(%Socket{} = socket, key, msg) do
     key = flash_key(key)
-    new_flash = Map.put(assigns[:flash] || %{}, key, msg)
-
-    socket = assign(socket, :flash, new_flash)
     update_in(socket.private.live_temp[:flash], &Map.put(&1 || %{}, key, msg))
   end
 
   @doc """
-  Returns a map of the flash messages which have changed.
+  Returns a map of the flash messages.
   """
-  def changed_flash(%Socket{} = socket) do
+  def get_flash(%Socket{} = socket) do
     socket.private.live_temp[:flash] || %{}
   end
 
