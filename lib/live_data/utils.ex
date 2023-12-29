@@ -137,7 +137,8 @@ defmodule LiveData.Utils do
   Returns a map of the flash messages.
   """
   def get_flash(%Socket{} = socket) do
-    socket.private.live_temp[:flash] || %{}
+    flash = socket.private.live_temp[:flash] || %{}
+    if(flash == %{}, do: nil, else: flash)
   end
 
   defp flash_key(binary) when is_binary(binary), do: binary
