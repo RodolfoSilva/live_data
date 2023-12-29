@@ -22,16 +22,16 @@ defmodule LiveData.Test.TestingData do
   end
 
   def handle_info(:increment, socket) do
-    socket =
-      socket
-      |> put_flash(:info, "Incremented!")
-      |> assign(:counter, socket.assigns.counter + 1)
-
-    {:ok, socket}
+    {:ok,
+     socket
+     |> put_flash(:info, "Incremented!")
+     |> push_event("chart", %{})
+     |> assign(:counter, socket.assigns.counter + 1)}
   end
 
   def handle_event("increment", _params, socket) do
-    socket = assign(socket, :counter, socket.assigns.counter + 1)
-    {:ok, socket}
+    {:ok,
+     socket
+     |> assign(:counter, socket.assigns.counter + 1)}
   end
 end

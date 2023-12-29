@@ -81,6 +81,18 @@ defmodule LiveData.Test.ClientProxy do
     {:noreply, state}
   end
 
+  def handle_info(
+        %Phoenix.Socket.Message{
+          event: event,
+          topic: _topic,
+          payload: payload
+        },
+        state
+      ) do
+    state = %{state | apply: %{state.apply | events: [{event, payload} | state.apply.events]}}
+    {:noreply, state}
+  end
+
   def handle_info(%Phoenix.Socket.Reply{}, state) do
     # state = %{state | apply: Apply.apply(ops, state.apply)}
     {:noreply, state}
@@ -96,6 +108,11 @@ defmodule LiveData.Test.ClientProxy do
     {:noreply, state}
   end
 
+  def handle_info({:get_events_sync, from}, state) do
+    :ok = GenServer.reply(from, state.apply.events)
+    {:noreply, state}
+  end
+
   def handle_call(:render, from, state) do
     :ok = LiveData.Channel.ping(state.pid)
     send(self(), {:render_sync, from})
@@ -105,6 +122,12 @@ defmodule LiveData.Test.ClientProxy do
   def handle_call(:get_flash, from, state) do
     :ok = LiveData.Channel.ping(state.pid)
     send(self(), {:get_flash_sync, from})
+    {:noreply, state}
+  end
+
+  def handle_call(:get_events, from, state) do
+    :ok = LiveData.Channel.ping(state.pid)
+    send(self(), {:get_events_sync, from})
     {:noreply, state}
   end
 

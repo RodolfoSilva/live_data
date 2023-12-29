@@ -5,7 +5,7 @@ defmodule LiveData.Test.Apply do
   #
   # Used by tests.
 
-  defstruct rendered: %{}, flash: %{}
+  defstruct rendered: %{}, flash: %{}, events: []
 
   def new do
     %__MODULE__{}
@@ -17,6 +17,6 @@ defmodule LiveData.Test.Apply do
       |> LiveData.Serializer.decompress()
       |> Jsonpatch.apply_patch!(%{"r" => state.rendered})
 
-    %{state | rendered: rendered}
+    %{state | rendered: rendered, events: []}
   end
 end
