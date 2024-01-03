@@ -88,7 +88,7 @@ defmodule LiveData.Channel do
   end
 
   def handle_info(message, state) do
-    {:ok, socket} = state.view.handle_info(message, state.socket)
+    {:noreply, socket} = state.view.handle_info(message, state.socket)
     state = %{state | socket: socket}
     state = render_view(state)
     {:noreply, state}
