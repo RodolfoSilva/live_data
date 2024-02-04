@@ -145,7 +145,7 @@ defmodule LiveData.Test.ClientProxy do
       assigns:
         LiveData.Socket.new_assign(%{
           live_data_handler: fn _params ->
-            {state.module, [], %{extra: %{}}}
+            {{state.module, [], %{extra: %{}}}, %{}}
           end
         }),
       transport_pid: self(),

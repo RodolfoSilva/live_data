@@ -88,7 +88,7 @@ defmodule LiveData.Channel do
   end
 
   def handle_info(message, state) do
-    {:noreply, socket} = state.view.handle_info(message, state.socket)
+    {:ok, socket} = state.view.handle_info(message, state.socket)
     state = %{state | socket: socket}
     state = render_view(state)
     {:noreply, state}
@@ -119,7 +119,8 @@ defmodule LiveData.Channel do
     handler = phx_socket.assigns.live_data_handler
 
     case call_handler(handler, params) do
-      {view_module, view_opts, %{extra: extra}} ->
+      {{view_module, view_opts, %{extra: extra}}, query_params} ->
+        params = Map.merge(params || %{}, query_params)
         mount_view(view_module, view_opts, extra, params, from, phx_socket)
 
       nil ->

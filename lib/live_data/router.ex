@@ -141,13 +141,15 @@ defmodule LiveData.Router do
       def __channel__(_topic), do: nil
 
       unquote(data_view_defs)
-      def __live_data__(_route), do: nil
+      def __live_data__(_route, _params), do: nil
 
       require Logger
 
       def __live_data_handler__(%{"r" => route} = x) do
-        Logger.debug("SDUI Render: #{route}")
-        __live_data__(route)
+        %URI{path: path, query: query} = URI.parse(route)
+        query_params = URI.query_decoder(query || "") |> Enum.into(%{})
+        Logger.debug("SDUI Render: #{path} \n Params: #{inspect(query_params)}")
+        {__live_data__(path), query_params}
       end
     end
   end
