@@ -120,7 +120,9 @@ defmodule LiveData.Channel do
 
     case call_handler(handler, params) do
       {{view_module, view_opts, %{extra: extra}}, query_params} ->
-        params = Map.merge(params || %{}, query_params)
+        custom_params = Map.merge(params["p"] || %{}, query_params)
+        params = Map.put(params, "p", custom_params)
+
         mount_view(view_module, view_opts, extra, params, from, phx_socket)
 
       nil ->
